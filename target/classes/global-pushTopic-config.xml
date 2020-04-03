@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:amqp="http://www.mulesoft.org/schema/mule/amqp" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/amqp http://www.mulesoft.org/schema/mule/amqp/current/mule-amqp.xsd">
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="5778db40-2765-4888-bcc0-8b5c65eb2348" >
+		<salesforce:cached-basic-connection username="${sf.username}" password="${sf.password}" url="${sf.url}"/>
+	</salesforce:sfdc-config>
+	<configuration-properties doc:name="Configuration properties" doc:id="0cbf179a-0630-4516-b954-36e57e37acc3" file="config/config-${mule.env}.yaml" />
+	<global-property doc:name="Global Property" doc:id="3b6e077d-4b4e-4be2-94a4-136ab4ee1164" name="mule.env" value="prod" />
+	<amqp:config name="AMQP_Config" doc:name="AMQP Config" doc:id="65628308-fed5-4a33-bdeb-359451387269" >
+		<amqp:connection host="${rabbitmq.host}" virtualHost="${rabbitmq.virtualhost}" username="${rabbitmq.username}" password="${rabbitmq.password}" />
+	</amqp:config>
+	<http:request-config name="rollbar" doc:name="HTTP Request configuration" doc:id="2d136b54-dcdc-4883-9b68-ed389b3918fc" >
+		<http:request-connection host="${rollbar.host}" port="${rollbar.port}" protocol="HTTPS"/>
+	</http:request-config>
+</mule>

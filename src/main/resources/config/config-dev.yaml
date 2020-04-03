@@ -1,0 +1,36 @@
+
+
+
+
+rabbitmq:
+  host: "happy-polar-bear.rmq.cloudamqp.com"
+  virtualhost: "hqezkggk"
+  username: "hqezkggk"
+  password: "ebspAkZ-QiO5JwvcCTXtlwNB5g2Os-5D"
+  leadQualifiedQueueName: "mule.wework.staging.pushtopic.lead_qualified"
+  leadQualifiedExchange: "wework.preproduction"
+  leadQualifiedKey: "events.sales.lead_qualified"
+  
+  potentialContactQueueName: "Mulesoft.wework.staging.events.sales.potential.contact"
+  potentialContactKey: "mulesoft.wework.staging.events.sales.potential.contact"
+  potentialContactExchange: "wework.staging"
+  
+  billingAccountQueueName: "Mulesoft.wework.staging.events.sales.potential.account"
+  billingAccountKey: "events.sales.potential.account"
+  billingAccountExchange: "wework.preproduction"
+  
+  opportunityTcvKey: "mule-referral-web.wework.staging.events.sales.opportunity_closed_won_with_tcv"
+  opportunityTcvExchange: "wework.staging"
+  
+  
+sf:
+  username: "badrinath.bhalkiker@wework.com.staging"
+  password: "Badrinath22!"
+  url: "https://test.salesforce.com/services/Soap/u/46.0"
+ 
+rollbar:
+  path: "/api/1/item/"
+  host: "api.rollbar.com"
+  port: "443"
+  accesstoken: "50a01e9766c248ceb0059ee9c6be6f1f"  
+  

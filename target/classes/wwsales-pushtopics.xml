@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:amqp="http://www.mulesoft.org/schema/mule/amqp"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/amqp http://www.mulesoft.org/schema/mule/amqp/current/mule-amqp.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="d9f0aef5-4260-454f-baea-19a6f7dbdd88" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<flow name="lead-qualified-topic-flow" doc:id="4b876276-7a22-41a0-bf15-ff932646af97" >
+<!-- 		<salesforce:subscribe-topic doc:name="Lead Qualified" doc:id="96e06a7b-d37c-4a7e-a760-e5e163b90da0" config-ref="Salesforce_Config" topic="LeadQualified"/> -->
+		<ee:transform doc:name="Final Payload" doc:id="5e57b16d-bd70-4de0-965a-958dc5f64bc6" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	email : payload.Email,
+	id: payload.Id
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="ad7806c5-9038-4546-bf7a-07218c15d779" message="final payload for rabbitmq #[payload]"/>
+		<amqp:publish doc:name="Publish" doc:id="658501a8-1570-4cb9-98d2-dde7451d097e" config-ref="AMQP_Config" exchangeName="${rabbitmq.leadQualifiedExchange}">
+			<amqp:routing-keys >
+				<amqp:routing-key value="${rabbitmq.leadQualifiedKey}" />
+			</amqp:routing-keys>
+		</amqp:publish>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="d257f190-6d4b-4c0b-a5d1-60728d3c5685" type="ANY">
+				<flow-ref doc:name="sf-rollbar-exception-reference" doc:id="9f67f9dd-7631-4008-867c-540d5fdf1939" name="sf-rollbar-exception-handling"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<flow name="potential-contacts-topic-flow" doc:id="85c75462-3cc1-4db2-9237-249ddfcc7c17" >
+<!-- 		<salesforce:subscribe-topic doc:name="potentialContacts Push Topic" doc:id="3ee4ad3f-8a9b-401a-9998-5e120f0d779a" config-ref="Salesforce_Config" topic="PotentialContacts"/> -->
+		<logger level="INFO" doc:name="Intial Payload" doc:id="2a79eb5e-a391-4076-8b5c-505cc400bde7" message="potentialContacts Topic payload #[payload]"/>
+		<ee:transform doc:name="Origianl Payload" doc:id="ab2af25d-cc47-4c3f-b4f6-a62c9c50c012" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="id" ><![CDATA[%dw 2.0
+output application/java
+---
+"'" ++ payload.Id ++ "'"]]></ee:set-variable>
+				<ee:set-variable variableName="origPayload" ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<salesforce:query doc:name="Relation Search Query" doc:id="24cc5f78-4127-437f-bc52-a360181be642" config-ref="Salesforce_Config">
+			<salesforce:salesforce-query >select Billing_Account_UUID__c from Contact where Id= :contactId</salesforce:salesforce-query>
+			<salesforce:parameters ><![CDATA[#[output application/java
+---
+{
+	contactId : vars.id
+}]]]></salesforce:parameters>
+		</salesforce:query>
+		<ee:transform doc:name="Final payload" doc:id="0b601c44-4641-4cb4-b4a6-acec274488a4" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	company_id: payload.Billing_Account_UUID__c,
+	user_params:  {
+		uuid: vars.origPayload.UUID__c,
+		name: vars.origPayload.Name,
+		email: vars.origPayload.Email,
+		phone: vars.origPayload.Phone
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Rabbitmq Payload" doc:id="d65a2750-4d7f-4b6b-a3e5-fa2949f586ae" message="final payload for rabbitmq #[payload]"/>
+		<amqp:publish doc:name="Publish" doc:id="3fabc283-f215-410d-8008-c9d1f35e5a7d" config-ref="AMQP_Config" exchangeName="${rabbitmq.potentialContactExchange}">
+			<amqp:routing-keys >
+				<amqp:routing-key value="${rabbitmq.potentialContactKey}" />
+			</amqp:routing-keys>
+		</amqp:publish>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="7035ca4f-54f9-4b3d-9d48-0ee60d86aa95" >
+				<flow-ref doc:name="sf-rollbar-exception-reference" doc:id="5a139944-0eec-4c2f-9328-bebc7d0622f5" name="sf-rollbar-exception-handling"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<flow name="billing-account-topic-flow" doc:id="ed6ed60c-8551-4386-b698-64367780a768" >
+<!-- 		<salesforce:subscribe-topic topic="BillingAccounts" doc:name="BillingAccount" doc:id="2cd8f307-d9dc-4228-b168-2d2bbb55dc2f" config-ref="Salesforce_Config"/> -->
+		<ee:transform doc:name="original payload" doc:id="f21f841f-a662-40c1-a96e-247315bf2410" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="mainPayload" ><![CDATA[%dw 2.0
+output application/java
+---
+{
+	Id: "'" ++ payload.data.sobject.Id ++ "'",
+	Name:payload.data.sobject.Name,
+	UUID__c:payload.data.sobject.UUID__c
+}]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="df023e94-3539-4776-93df-b1659a2ce060" message="Billing Account pushtopic payload #[payload]"/>
+		<salesforce:query doc:name="Relation Search Query" doc:id="0250eb43-98cf-4eae-bfe3-968d89bd6617" config-ref="Salesforce_Config">
+			<salesforce:salesforce-query >select UUID__c,Name,Email from contact where id =:id</salesforce:salesforce-query>
+			<salesforce:parameters ><![CDATA[#[output application/java
+---
+{
+	id : vars.mainPayload.Id
+}]]]></salesforce:parameters>
+		</salesforce:query>
+		<ee:transform doc:name="Final Payload" doc:id="837f2687-1348-492b-895f-64e153a143bc" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	aacount_uuid: vars.mainPayload.Id,
+	account_name: payload.vars.mainPayload.Name,
+	primary_member: payload map{
+		uuid:$.UUID__c,
+		name: $.Name,
+		email: $.Email,
+	
+	}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="01406c57-b038-415e-8f10-85e7918e8d52" message="after BillingAccount Transformation #[payload]"/>
+		<amqp:publish doc:name="Publish" doc:id="793c1aaf-7113-4b38-b640-33fa36f397b9" config-ref="AMQP_Config" exchangeName="${rabbitmq.billingAccountExchange}">
+			<amqp:routing-keys >
+				<amqp:routing-key value="${rabbitmq.billingAccountKey}" />
+			</amqp:routing-keys>
+		</amqp:publish>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="e92894d5-1608-4336-a186-64fa1f276b24" type="ANY">
+				<flow-ref doc:name="sf-rollbar-exception-reference" doc:id="a650d171-a8ac-48ad-9e9c-f5d270170b2a" name="sf-rollbar-exception-handling"/>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	
+	<flow name="oportunityTcv-flow" doc:id="963d4d34-4b25-4360-bf8d-6ca7a5ca7c0b" >
+		<salesforce:subscribe-topic doc:name="Opportunity TCV Referral Subscribe topic" doc:id="0c63e7f5-bdff-432b-852b-4f75f138f171" config-ref="Salesforce_Config" topic="OpportunityTCVAvailable">
+			<non-repeatable-stream />
+			<reconnect count="3" />
+		</salesforce:subscribe-topic>
+		<logger level="INFO" doc:name="Pushtopic Payload" doc:id="69c2d800-8baf-4338-b86e-b6236a3bbadb" message="Opportunity TCV Flow Started #[payload]"/>
+		<ee:transform doc:name="Origianl Payload" doc:id="b9a124a4-5cee-46f0-895a-1f6e0e98c366" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload]]></ee:set-payload>
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="oppOrigPayload" ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-variable>
+				<ee:set-variable variableName="id" ><![CDATA[%dw 2.0
+output application/java
+---
+"'" ++ payload.Id ++ "'"
+]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<salesforce:query doc:name="Relation search query" doc:id="483015f0-a0dd-4bc9-9996-9442a170e439" config-ref="Salesforce_Config">
+			<salesforce:salesforce-query >SELECT Referrer__r.Email, Referrer__r.Name, Billing_Account__r.UUID__c, Primary_member__r.Name, Primary_member__r.Email, Building__r.Building_Id__c FROM Opportunity where Id=:id</salesforce:salesforce-query>
+			<salesforce:parameters ><![CDATA[#[output application/java
+---
+{
+	id : vars.id
+}]]]></salesforce:parameters>
+		</salesforce:query>
+		<ee:transform doc:name="Final Payload" doc:id="7daff754-2a92-4db7-8cbb-180d954a6ac4" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	sf_opportunity_id : vars.oppOrigPayload.Id,
+	referral_email: payload[0].Primary_Member__r.Email,
+	referrer_id: vars.oppOrigPayload.Referrer__c,
+	referrer_email: payload[0].Referrer__r.Email,
+	referrer_name: payload[0].Referrer__r.Name,
+	referral_name: payload[0].Primary_Member__r.Name,
+	building_code: payload[0].Building__r.Building_ID__c,
+	company_uuid: payload[0].Billing_Account__r.UUID__c,
+	contract_uuid: vars.oppOrigPayload.Contract_UUID__c,
+	contract_type: vars.oppOrigPayload.Contract_Type__c,
+	net_tcv_unweighted: vars.oppOrigPayload.Net_TCV_unweighted__c,
+	tcv_default_currency: vars.oppOrigPayload.TCV_Default_Currency__c,
+	commitment_term_in_months: vars.oppOrigPayload.Commitment_Term_in_months__c,
+	no_of_desks_unweighted: vars.oppOrigPayload.No_of_Desks_unweighted__c
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Rabbitmq Payload" doc:id="b1521507-b606-46e3-a959-b1c8d20d0017" message="Opportunity TCV final payload to rabbitmq #[payload]"/>
+		<amqp:publish doc:name="Publish" doc:id="f1f3814a-268e-4efd-a294-88b78b6ca069" config-ref="AMQP_Config" exchangeName="${rabbitmq.opportunityTcvExchange}">
+			<amqp:routing-keys >
+				<amqp:routing-key value="${rabbitmq.opportunityTcvKey}" />
+			</amqp:routing-keys>
+		</amqp:publish>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="e14a4980-1d00-4182-b697-5a43a7271819" type="ANY">
+				<flow-ref doc:name="sf-rollbar-exception-handling-reference" doc:id="59d23312-ba49-4f37-bce6-7049375dfa77" name="sf-rollbar-exception-handling"/>
+			</on-error-continue>
+		</error-handler>
+	</flow>
+</mule>

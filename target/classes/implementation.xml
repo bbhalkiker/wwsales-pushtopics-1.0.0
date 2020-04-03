@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd 
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd">
+	
+<flow name="sf-rollbar-exception-handling" doc:id="4c902730-cf86-47b9-bf78-0f784234aaec" >
+		<logger level="INFO" doc:name="sf-rollbar-exception-handling started" doc:id="fca1ae50-88a9-4ac3-8573-2e050127fc88" message='sf-rollbar-exception-handling started'/>
+		<ee:transform doc:name="RollBar Request Tranform" doc:id="6b9d51fe-5f2e-4b05-b676-90fedc76f9a7">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	access_token: p('rollbar.accesstoken'),
+	data: {
+		environment: p('rollbar.environment'),
+		body: {
+			source: "Salesforce",
+			target: "RabbitMq",
+			executiontime: now(),
+			flowName: (app.name as String) default "",//vars.applicationName as String,
+			messageId: (correlationId as String) default "",//vars.cor as String,
+			response: payload default "",
+			message: {
+				body: (app.name as String) default ""
+		},
+		level: "ERROR in push topic " 
+	}
+}}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<http:request method="POST" doc:name="Request-Rollbar" doc:id="7db4f927-4322-40d0-abe4-c548d0875f9c" path="${rollbar.path}" config-ref="rollbar"/> 
+		<ee:transform doc:name="RollBar Response Transform" doc:id="4716cc1e-b703-4110-9c63-9b6b55b25a86" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	status: "failure",
+	msg: "failed record"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="sf-rollbar-exception-handling ended" doc:id="acd09a6c-d63a-4bba-9ca8-0af7602d0a8e" message='sf-rollbar-exception-handling ended'/>
+	
+</flow>
+	</mule>
